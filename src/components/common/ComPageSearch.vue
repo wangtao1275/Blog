@@ -11,7 +11,7 @@
           v-for="(col, subIndex) in row"
           :key="subIndex"
           :label="col.label"
-          :class="{ 'el-form-item__lager': col.size == 'lager' }"
+          :class="{ 'el-form-item__larger': col.size == 'lager' }"
         >
           <template v-if="!col.type || col.type === 'input'">
             <el-input
@@ -135,6 +135,7 @@
 </template>
 
 <script>
+import QRCode from 'qrcode';
 export default {
   name: "ComPageSearch",
   props: {
@@ -177,10 +178,105 @@ export default {
       qrcode: ""
     };
   },
-  mounted () {
-      this.handlerDate();
+  mounted() {
+    this.handlerDate();
   },
+  methods: {
+    handlerDate() {
+      if (this.dateCheck) {
+        this.daterangeOpt.disableDate = function(date) {
+          return new Date(date).getTime() > new Date().getTime();
+        };
+      } else {
+        this.daterangeOpt.disabledDate = function() {
+          return false;
+        };
+      }
+    },
+    // 按钮点击事件，把数据传回去
+    btnClick(item) {
+      if (item.action === "clear") {
+        this.action.forEach(row => {
+          row.forEach(col => {
+            if (col.name) {
+              this.$set(
+                this.search,
+                col.name,
+                col.value !== null
+                  ? typeof col.value === "string"
+                    ? col.value.trim()
+                    : col.value
+                  : null
+              );
+            }
+          });
+        });
+      }
+      item.fn(this.search);
+    },
+    // 下拉框改变事件
+    selectChange($event, col) {
+      col.fn && col.fn($event);
+    },
+    // input 改变事件
+    verifyID(val, col) {
+      col.fn && col.fn(val, col);
+      // eslint-disable-next-line
+      let newVal = val.replace(/^0|[^\d+]|[`,\.eE\-\+]/g, "");
+      this.search[col.name] = newVal;
+      this.$set(this.search, col.name, newVal);
+    }
+  },
+  watch: {
+    // 监听一下search，在改变的时候回传出去
+    search: {
+      handler: function(val, oldVal) {
+        this.$emit("onchange", val);
+      },
+      deep: true
+    },
+    action: {
+      handler(val, old) {
+        val.forEach(row => {
+          row.forEach(col => {
+            if (col.name) {
+              this.$set(
+                this.search,
+                col.name,
+                col.value !== null ? col.value : null
+              );
+            }
+            if (col.type === "qrcode" && col.value) {
+              QRCode.toDataURL(col.value).then(url => {
+                this.qrcode = url;
+              });
+            }
+          });
+        });
+        this.$emit("oninit", this.search);
+      },
+      deep: true,
+      immediate: true
+    }
+  }
 };
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+.el-form /deep/ {
+  .el-input,
+  .el-select,
+  .el-date-editor--daterange.el-input__inner {
+    width: 220px;
+  }
+  .el-image__error {
+    line-height: 1;
+  }
+  .el-form-item__larger .el-form-item__content {
+    width: 447px;
+    .el-input {
+      width: 100%;
+    }
+  }
+}
+</style>
