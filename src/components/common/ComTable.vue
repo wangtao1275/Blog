@@ -257,13 +257,215 @@
           </template>
         </el-table-column>
       </template>
+      <!-- 如果action存在 再显示 -->
+      <el-table-column
+        label="操作"
+        :width="actionWidth"
+        v-if="actions.length"
+        class-name="actions link-cell"
+        fixed="right"
+      >
+        <!-- actionTrigger 这个目前只在im的群组用到，用于检测是不是群主，群主不限时操作按钮 -->
+        <template slot="scope">
+          <template
+            v-if="
+              !actionTrigger.field ||
+                scope.row[actionTrigger.field] != actionTrigger.value
+            "
+          >
+            <template v-for="(action, n) in actions">
+              <!-- 显示链接 -->
+              <template v-if="!action.type || action.type === 'link'">
+                <!-- 根据trigger判断显示操作按钮 -->
+                <template v-if="action.trigger">
+                  <el-link
+                    v-if="
+                      scope.row[action.trigger.field] === action.trigger.value
+                    "
+                    :key="'btn' + n"
+                    :underline="false"
+                    :type="action.style || 'primary'"
+                    :disabled="action.disabled || false"
+                    @click="action.fn(scope.row, scope.$index)"
+                  >
+                    {{ action.text }}
+                  </el-link>
+                </template>
+                <el-link
+                  v-else
+                  :key="'btn' + n"
+                  :underline="false"
+                  :type="action.style || 'primary'"
+                  :disabled="action.disabled || false"
+                  @click="action.fn(scope.row, scope.$index)"
+                >
+                  {{ action.text }}
+                </el-link>
+              </template>
+
+              <!-- 显示按钮 -->
+              <template v-if="action.type === 'button'">
+                <template v-if="action.trigger">
+                  <el-button
+                    v-if="
+                      scope.row[action.trigger.field] == action.trigger.value
+                    "
+                    size="mini"
+                    :key="n"
+                    :type="action.style || 'default'"
+                    @click="action.fn(scope.row, scope.$index)"
+                  >
+                    {{ action.text }}
+                  </el-button>
+                </template>
+                <el-button
+                  v-else
+                  size="mini"
+                  :key="n"
+                  :type="action.style || 'default'"
+                  @click="action.fn(scope.row, scope.$index)"
+                >
+                  {{ action.text }}
+                </el-button>
+              </template>
+            </template>
+          </template>
+        </template>
+      </el-table-column>
     </el-table>
+
+    <!-- 分页 -->
+    <el-row class="list-ft" v-if="total > 0">
+      <el-col :span="6">
+        <template v-if="batDel">
+          <el-button
+            v-for="(item, key) in batActions"
+            :key="key"
+            :type="item.style || 'danger'"
+            @click="item.fn(listSects)"
+          >
+            {{ item.text }}
+          </el-button>
+        </template>
+        <!-- 如果内容为空，宽度会撑不起来，所以加一个占位符 -->
+        <span v-else>&nbsp;</span>
+      </el-col>
+      <el-col :span="18">
+        <el-pagination
+          v-if="total"
+          background
+          layout="->, total, sizes, prev, pager, next, jumper"
+          :total="total"
+          :current-page="pageNo"
+          :page-size="pagesize"
+          :page-sizes="pagesizes"
+          @size-change="onSizeChange"
+          @current-change="onPage"
+        >
+        </el-pagination>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script>
 export default {
   props: {
+    isopen: {
+      required: false,
+      type: Boolean,
+      default() {
+        return false;
+      }
+    },
+    // list item 包含 label prop tip type
+    list: {
+      required: true,
+      type: Array,
+      default() {
+        return [];
+      }
+    },
+    // 显示的字段
+    fields: {
+      required: true,
+      type: Array,
+      default() {
+        return [];
+      }
+    },
+    // 最右侧操作按钮
+    actions: {
+      required: false,
+      type: Array,
+      default() {
+        return [];
+      }
+    },
+    // 检测操作按钮是否显示的条件
+    actionTrigger: {
+      required: false,
+      type: Object,
+      default() {
+        return {};
+      }
+    },
+    // 操作列宽度
+    actionWidth: {
+      required: false,
+      type: String,
+      default() {
+        return "";
+      }
+    },
+    // 是否懒加载
+    lazy: {
+      required: false,
+      type: Boolean,
+      default() {
+        return false;
+      }
+    },
+    // 懒加载函数
+    load: {
+      required: false,
+      type: Function,
+      default() {
+        return () => {};
+      }
+    },
+    // 总过有多少条数据
+    total: {
+      required: false,
+      type: Number,
+      default() {
+        return 0;
+      }
+    },
+    // 当前分页
+    currPage: {
+      required: false,
+      type: Number,
+      default() {
+        return 1;
+      }
+    },
+    // 批量操作列表
+    batActions: {
+      required: false,
+      type: Array,
+      default() {
+        return [
+          {
+            text: "删除",
+            style: "danger",
+            fn: () => {
+              this.$emit("listBatAction", this.listSelects);
+            }
+          }
+        ];
+      }
+    },
     selectable: {
       required: false,
       type: Function,
@@ -275,8 +477,88 @@ export default {
     }
   },
 
+  data() {
+    return {
+      listSelects: [],
+      batDel: false,
+      pageNo: 1,
+      pagesizes: [10, 20, 30, 50, 100, 200, 500],
+      pagesize: 10,
+      tableHeight: 200
+    };
+  },
+  mounted () {
+    this.hasSelect();
+    this.handleTableHeight();
+  },
+  watch: {
+    currPage(val) {
+      this.pageNo = val;
+    },
+    total() {
+      this.handleTableHeight();
+    }
+  },
   methods: {
-    name() {}
+    // 分页
+    onPage(pageno) {
+      this.pageNo = pageno;
+
+      this.$emit("onpage", pageno);
+    },
+    // 每页显示数量改变事件
+    onSizeChange(size) {
+      this.pageNo = 1;
+      this.pagesize = size;
+
+      this.$emit("onsize", size);
+    },
+    // 判断fields里面有没有type等于selection的
+    hasSelect() {
+      let flag = false;
+      this.fields.forEach(item => {
+        if (item.type && item.type === 'selection') {
+          flag = true;
+        }
+      });
+
+      this.batDel = flag && this.batActions.length;
+    },
+    // 列表选择
+    listSelect(rows){
+      this.listSelects = rows;
+      this.$emit('listSelect', rows);
+    },
+    // 列表点击事件
+    listClick(row, column, event) {
+      this.$emit('listClick', row, column, event);
+    },
+    // 单元格内容点击事件
+    listItemClick(item, row) {
+      item.fn && item.fn(row);
+    },
+    handleTableHeight: function() {
+      var _this = this;
+      window.onresize = function() {
+        var t1 = null;
+        window.clearTimeout(t1);
+        t1 = setTimeout(function() {
+          var tableSearch = document.getElementById('tableSearch');
+          if (!tableSearch) {
+            return;
+          }
+          _this.tableHeight =
+            window.innerHeight - tableSearch.clientHeight - 285;
+          if (_this.total <= 0) {
+            _this.tableHeight += 53;
+          }
+          if (_this.tableHeight < 300) {
+            _this.tableHeight = 300;
+          }
+        }, 100);
+      };
+      window.onresize();
+    },
   }
 };
 </script>
