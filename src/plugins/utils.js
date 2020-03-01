@@ -197,5 +197,29 @@ export const utils = {
       }
     }
     return data;
+  },
+  compressFile(file, fn) {
+    let _this = this;
+    let is1M = 1024 * 1024;
+    let is2M = is1M * 2;
+    // 默认
+    let quality = 'low';
+    // 2m>size>1m
+    if (file.size > is1M && file.size < is2M) {
+      quality = 'middle';
+    }
+    // size>2m
+    if (file.size > is2M) {
+      quality = 'height';
+    }
+
+    new this.$compressor(file, {
+      quality: _this.$compressionspecifications[quality],
+      success(result){
+        // 返回新的文件
+        fn(result);
+      }
+    });
+
   }
 };
